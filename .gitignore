@@ -1,3 +1,9 @@
 /build
 /bin
 /assets/brickadia
+/_cmake
+/src/CMakeFiles
+src/CMakeCache.txt
+third_party/fmt/fmt-config-version.cmake
+third_party/fmt/fmt-config.cmake
+third_party/fmt/fmt.pc
