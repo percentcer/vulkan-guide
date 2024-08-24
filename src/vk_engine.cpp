@@ -127,6 +127,11 @@ void VulkanEngine::destroy_swapchain()
 void VulkanEngine::cleanup()
 {
 	if (_isInitialized) {
+		vkDeviceWaitIdle(_device);
+		for (int i = 0; i < FRAME_OVERLAP; i++) {
+			vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+		}
+
 		destroy_swapchain();
 
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
