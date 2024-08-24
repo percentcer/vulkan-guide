@@ -88,20 +88,11 @@ void VulkanEngine::init_swapchain() {
 	create_swapchain(_windowExtent.width, _windowExtent.height);
 }
 void VulkanEngine::init_commands() {
-	VkCommandPoolCreateInfo commandPoolInfo = {};
-	commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	commandPoolInfo.pNext = nullptr;
-	commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	commandPoolInfo.queueFamilyIndex = _graphicsQueueFamily;
+	VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
-		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
-		
-		VkCommandBufferAllocateInfo cmdAllocInfo = {};
-		cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cmdAllocInfo.pNext = nullptr;
-		cmdAllocInfo.commandPool = _frames[i]._commandPool;
-		cmdAllocInfo.commandBufferCount = 1;
-		cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));		
+
+		VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
 	}
 }
