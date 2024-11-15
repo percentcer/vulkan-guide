@@ -2,6 +2,9 @@
 #include "vk_engine.h"
 #include "VkBootstrap.h"
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 #include <SDL.h>
 #include <SDL_vulkan.h>
 
@@ -84,6 +87,17 @@ void VulkanEngine::init_vulkan() {
 
 	_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+	VmaAllocatorCreateInfo allocatorInfo = {};
+	allocatorInfo.physicalDevice = _chosenGPU;
+	allocatorInfo.device = _device;
+	allocatorInfo.instance = _instance;
+	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+	_deletionQueueGlobal.push_function([this]() {
+		vmaDestroyAllocator(_allocator);
+		});
 }
 
 void VulkanEngine::init_swapchain() {
@@ -94,7 +108,7 @@ void VulkanEngine::init_commands() {
 	VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
 		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
-
+		
 		VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
 	}
@@ -146,7 +160,10 @@ void VulkanEngine::cleanup()
 			vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
 			vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
 			vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
+
+			_frames[i]._deletionQueueFrame.flush();
 		}
+		_deletionQueueGlobal.flush();
 
 		destroy_swapchain();
 
@@ -167,13 +184,16 @@ constexpr uint32_t ONE_SEC = 1000000000;
 void VulkanEngine::draw()
 {
 	VK_CHECK(vkWaitForFences(
-		_device, 
-		1, 
-		&get_current_frame()._renderFence, 
-		true, 
+		_device,
+		1,
+		&get_current_frame()._renderFence,
+		true,
 		ONE_SEC));
 	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
-	
+
+	// clean up objects from last frame
+	get_current_frame()._deletionQueueFrame.flush();
+
 	uint32_t swapchainImageIndex;
 	VK_CHECK(vkAcquireNextImageKHR(
 		_device,

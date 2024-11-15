@@ -5,12 +5,28 @@
 
 #include <vk_types.h>
 
+struct DeletionQueue {
+	std::deque<std::function<void()>> queue;
+
+	void push_function(std::function<void()>&& fn) {
+		queue.push_back(fn);
+	}
+
+	void flush() {
+		for (auto it = queue.rbegin(); it != queue.rend(); it++) {
+			(*it)();
+		}
+		queue.clear();
+	}
+};
+
 struct FrameData {
 	VkCommandPool _commandPool;
 	VkCommandBuffer _mainCommandBuffer;
 	VkSemaphore _swapchainSemaphore;
 	VkSemaphore _renderSemaphore;
 	VkFence _renderFence;
+	DeletionQueue _deletionQueueFrame;
 };
 
 constexpr uint32_t FRAME_OVERLAP = 2;
@@ -57,6 +73,10 @@ public:
 
 	VkQueue _graphicsQueue;
 	uint32_t _graphicsQueueFamily;
+
+	DeletionQueue _deletionQueueGlobal;
+
+	VmaAllocator _allocator;
 
 private:
 	void init_vulkan();
