@@ -10,6 +10,7 @@
 
 #include <vk_images.h>
 #include <vk_initializers.h>
+#include <vk_pipelines.h>
 #include <vk_types.h>
 
 #include <chrono>
@@ -45,6 +46,7 @@ void VulkanEngine::init()
 	init_commands();
 	init_sync_structures();
 	init_descriptors();
+	init_pipelines();
 
 	// everything went fine
 	_isInitialized = true;
@@ -199,6 +201,41 @@ void VulkanEngine::init_descriptors()
 	});
 }
 
+void VulkanEngine::init_pipelines()
+{
+	init_background_pipelines();
+}
+
+void VulkanEngine::init_background_pipelines()
+{
+	VkPipelineLayoutCreateInfo computeLayout{.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .pNext = nullptr};
+	computeLayout.pSetLayouts = &_drawImageDescriptorLayout;
+	computeLayout.setLayoutCount = 1;
+	VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
+
+	VkShaderModule computeDrawShader;
+	if (!vkutil::load_shader_module("../../shaders/gradient.comp.spv", _device, &computeDrawShader)) {
+		fmt::print("Error when building the compute shader \n");
+	}
+
+	VkPipelineShaderStageCreateInfo stageinfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = nullptr };
+	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	stageinfo.module = computeDrawShader;
+	stageinfo.pName = "main";
+
+	VkComputePipelineCreateInfo computePipeCreateInfo{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .pNext = nullptr };
+	computePipeCreateInfo.layout = _gradientPipelineLayout;
+	computePipeCreateInfo.stage = stageinfo;
+
+	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &_gradientPipeline));
+
+	vkDestroyShaderModule(_device, computeDrawShader, nullptr);
+	_deletionQueueGlobal.push_function([&]() {
+		vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
+		vkDestroyPipeline(_device, _gradientPipeline, nullptr);
+		});
+}
+
 void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
 {
 	vkb::SwapchainBuilder builder{ _chosenGPU, _device, _surface };
@@ -292,12 +329,16 @@ void VulkanEngine::draw()
 
 	// draw background
 	{
-		VkClearColorValue clearValue;
-		float flash = std::abs(std::sin(_frameNumber / 120.f));
-		clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
+		//VkClearColorValue clearValue;
+		//float flash = std::abs(std::sin(_frameNumber / 120.f));
+		//clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
 
-		VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
-		vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+		//VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+		//vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+		vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
 	}
 
 	// prepare to blit (from draw to current swapchain)
