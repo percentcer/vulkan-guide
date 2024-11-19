@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vk_descriptors.h>
 #include <vk_types.h>
 
 struct DeletionQueue {
@@ -81,11 +82,16 @@ public:
 	AllocatedImage _drawImage;
 	VkExtent2D _drawExtent;
 
+	DescriptorAllocator _descriptorAllocatorGlobal;
+	VkDescriptorSet _drawImageDescriptors;
+	VkDescriptorSetLayout _drawImageDescriptorLayout;
+
 private:
 	void init_vulkan();
 	void init_swapchain();
 	void init_commands();
 	void init_sync_structures();
+	void init_descriptors();
 
 	void create_swapchain(uint32_t width, uint32_t height);
 	void destroy_swapchain();
