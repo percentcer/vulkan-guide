@@ -173,6 +173,7 @@ void VulkanEngine::init_sync_structures() {
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
 	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
+	_deletionQueueGlobal.push_function([=]() {});
 }
 
 void VulkanEngine::init_descriptors()
