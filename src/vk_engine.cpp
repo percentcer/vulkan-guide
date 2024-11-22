@@ -47,9 +47,15 @@ void VulkanEngine::init()
 	init_sync_structures();
 	init_descriptors();
 	init_pipelines();
+	init_imgui();
 
 	// everything went fine
 	_isInitialized = true;
+}
+
+void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
+{
+
 }
 
 void VulkanEngine::init_vulkan() {
@@ -149,6 +155,13 @@ void VulkanEngine::init_commands() {
 		VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
 	}
+
+	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immCommandPool));
+	VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_immCommandPool, 1);
+	VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
+	_deletionQueueGlobal.push_function([=]() {
+		vkDestroyCommandPool(_device, _immCommandPool, nullptr);
+	});
 }
 
 void VulkanEngine::init_sync_structures() {
@@ -159,6 +172,7 @@ void VulkanEngine::init_sync_structures() {
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
+	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
 }
 
 void VulkanEngine::init_descriptors()
@@ -234,6 +248,10 @@ void VulkanEngine::init_background_pipelines()
 		vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
 		vkDestroyPipeline(_device, _gradientPipeline, nullptr);
 		});
+}
+
+void VulkanEngine::init_imgui()
+{
 }
 
 void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
