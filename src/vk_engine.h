@@ -52,6 +52,7 @@ public:
 
 	//draw loop
 	void draw();
+	void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
 	//run main loop
 	void run();
@@ -90,12 +91,6 @@ public:
 	VkPipelineLayout _gradientPipelineLayout;
 	
 	// immediate submit structures
-	VkFence _immFence;
-	VkCommandBuffer _immCommandBuffer;
-	VkCommandPool _immCommandPool;
-	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
-
-	// imgui stuff (immediates)
 	VkFence _immFence;
 	VkCommandBuffer _immCommandBuffer;
 	VkCommandPool _immCommandPool;
