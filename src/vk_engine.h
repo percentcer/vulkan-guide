@@ -100,7 +100,6 @@ public:
 	VkDescriptorSet _drawImageDescriptors;
 	VkDescriptorSetLayout _drawImageDescriptorLayout;
 
-	VkPipeline _gradientPipeline;
 	VkPipelineLayout _gradientPipelineLayout;
 	
 	// immediate submit structures
