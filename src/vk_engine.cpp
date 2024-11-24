@@ -438,7 +438,17 @@ void VulkanEngine::draw()
 	// prepare to present
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-	draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+	//draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+	{
+		VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(_swapchainImageViews[swapchainImageIndex], nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkRenderingInfo renderInfo = vkinit::rendering_info(_swapchainExtent, &colorAttachment, nullptr);
+
+		vkCmdBeginRendering(cmd, &renderInfo);
+
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+
+		vkCmdEndRendering(cmd);
+	}
 
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
@@ -462,15 +472,6 @@ void VulkanEngine::draw()
 	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
 
 	_frameNumber++;
-}
-
-void VulkanEngine::draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView)
-{
-	VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	VkRenderingInfo renderInfo = vkinit::rendering_info(_swapchainExtent, &colorAttachment, nullptr);
-	vkCmdBeginRendering(cmd, &renderInfo);
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-	vkCmdEndRendering(cmd);
 }
 
 void VulkanEngine::run()
