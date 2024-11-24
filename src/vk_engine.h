@@ -95,6 +95,12 @@ public:
 	VkCommandPool _immCommandPool;
 	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
+	// imgui stuff (immediates)
+	VkFence _immFence;
+	VkCommandBuffer _immCommandBuffer;
+	VkCommandPool _immCommandPool;
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
+
 private:
 	void init_vulkan();
 	void init_swapchain();

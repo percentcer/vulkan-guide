@@ -178,7 +178,7 @@ void VulkanEngine::init_commands() {
 	VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
 	_deletionQueueGlobal.push_function([=]() {
 		vkDestroyCommandPool(_device, _immCommandPool, nullptr);
-		});
+	});
 }
 
 void VulkanEngine::init_sync_structures() {
