@@ -44,6 +44,18 @@ struct ComputeEffect {
 	ComputePushConstants data;
 };
 
+struct ComputeParticle {
+	glm::vec2 pos;
+	glm::vec2 vel;
+	glm::vec4 color;
+	glm::vec4 data1; // <_, _, _, _>
+	glm::vec4 data2; // <_, _, _, _>
+};
+
+struct UniformData {
+	float dt;
+};
+
 constexpr uint32_t FRAME_OVERLAP = 2;
 
 class VulkanEngine {
@@ -111,11 +123,15 @@ public:
 	std::vector<ComputeEffect> _effects;
 	int _currentEffect{ 0 };
 
+	VkBuffer _computeStorageBuffer;
+	VkBuffer _uniformBuffer;
+
 private:
 	void init_vulkan();
 	void init_swapchain();
 	void init_commands();
 	void init_sync_structures();
+	void init_compute_buffers();
 	void init_descriptors();
 	void init_pipelines();
 	void init_background_pipelines();

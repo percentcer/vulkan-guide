@@ -17,6 +17,7 @@
 #include <vk_types.h>
 
 #include <chrono>
+#include <random>
 #include <thread>
 
 VulkanEngine* loadedEngine = nullptr;
@@ -26,6 +27,8 @@ VulkanEngine& VulkanEngine::Get() { return *loadedEngine; }
 constexpr bool bUseValidationLayers = true;
 constexpr uint32_t ONE_SEC = 1000000000;
 constexpr uint32_t LONG_TIME = 9999999999;
+
+constexpr uint32_t PARTICLE_COUNT = 256 * 1024;
 
 void VulkanEngine::init()
 {
@@ -50,6 +53,7 @@ void VulkanEngine::init()
 	init_swapchain();
 	init_commands();
 	init_sync_structures();
+	init_compute_buffers();
 	init_descriptors();
 	init_pipelines();
 	init_imgui();
@@ -178,7 +182,7 @@ void VulkanEngine::init_commands() {
 	VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
 	_deletionQueueGlobal.push_function([=]() {
 		vkDestroyCommandPool(_device, _immCommandPool, nullptr);
-	});
+		});
 }
 
 void VulkanEngine::init_sync_structures() {
@@ -191,6 +195,72 @@ void VulkanEngine::init_sync_structures() {
 	}
 	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
 	_deletionQueueGlobal.push_function([=]() { vkDestroyFence(_device, _immFence, nullptr); });
+}
+
+void VulkanEngine::init_compute_buffers()
+{
+	std::default_random_engine rndEngine((unsigned)time(nullptr));
+	std::uniform_real_distribution<float> rndDist(-1.0f, 1.0f);
+	std::vector<ComputeParticle> particles(PARTICLE_COUNT);
+	for (ComputeParticle& p : particles) {
+		p.pos = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
+		p.vel = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
+	}
+	VkDeviceSize bufferSize = particles.size() * sizeof(ComputeParticle);
+
+	VkBufferCreateInfo stagingInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.size = bufferSize,
+		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 1,
+		.pQueueFamilyIndices = &_graphicsQueueFamily };
+	VK_CHECK(vkCreateBuffer(_device, &stagingInfo, nullptr, &_computeStorageBuffer));
+
+	VkMemoryRequirements2 memReqs{
+		.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+		.pNext = nullptr
+	};
+	VkBufferMemoryRequirementsInfo2 memReqsInfo{ 
+		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2, 
+		.pNext = nullptr, 
+		.buffer = _computeStorageBuffer };
+	vkGetBufferMemoryRequirements2(_device, &memReqsInfo, &memReqs);
+
+	VkPhysicalDeviceMemoryProperties2 physProps{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+		.pNext = nullptr,
+	};
+	vkGetPhysicalDeviceMemoryProperties2(_chosenGPU, &physProps);
+
+	uint32_t memoryTypeIdx = 0;
+	VkMemoryPropertyFlags desiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+	for (uint32_t i = 0; i < physProps.memoryProperties.memoryTypeCount; i++) {
+		if (memReqs.memoryRequirements.memoryTypeBits & (1 << i)) {
+			if (physProps.memoryProperties.memoryTypes[i].propertyFlags & desiredFlags) {
+				memoryTypeIdx = i;
+				break;
+			}
+		}
+	}
+
+	VkMemoryAllocateInfo memAllocInfo {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = nullptr,
+		.allocationSize = memReqs.memoryRequirements.size,
+		.memoryTypeIndex = memoryTypeIdx
+	};
+
+	VkDeviceMemory deviceMemory;
+	VK_CHECK(vkAllocateMemory(_device, &memAllocInfo, nullptr, &deviceMemory));
+	VK_CHECK(vkBindBufferMemory(_device, _computeStorageBuffer, deviceMemory, 0));
+
+	_deletionQueueGlobal.push_function([=]() {
+		vkFreeMemory(_device, deviceMemory, nullptr);
+		vkDestroyBuffer(_device, _computeStorageBuffer, nullptr);
+	});
 }
 
 void VulkanEngine::init_descriptors()
@@ -230,7 +300,7 @@ void VulkanEngine::init_descriptors()
 	_deletionQueueGlobal.push_function([&]() {
 		_descriptorAllocatorGlobal.destroy_pool(_device);
 		vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
-	});
+		});
 }
 
 void VulkanEngine::init_pipelines()
@@ -245,7 +315,7 @@ void VulkanEngine::init_background_pipelines()
 	pushConstants.size = sizeof(ComputePushConstants);
 	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-	VkPipelineLayoutCreateInfo computeLayout{.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .pNext = nullptr};
+	VkPipelineLayoutCreateInfo computeLayout{ .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .pNext = nullptr };
 	computeLayout.pSetLayouts = &_drawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
 	computeLayout.pPushConstantRanges = &pushConstants;
@@ -308,7 +378,7 @@ void VulkanEngine::init_imgui()
 {
 	// 1. create descriptor pool for imgui itself
 	// (copied from imgui demo)
-	VkDescriptorPoolSize pool_sizes[] = 
+	VkDescriptorPoolSize pool_sizes[] =
 	{
 		{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
 		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
@@ -320,7 +390,7 @@ void VulkanEngine::init_imgui()
 		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
 		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } 
+		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
 	};
 
 	VkDescriptorPoolCreateInfo pool_info = {};
@@ -336,7 +406,7 @@ void VulkanEngine::init_imgui()
 	// 2. init imgui library
 	ImGui::CreateContext();
 	ImGui_ImplSDL2_InitForVulkan(_window);
-	
+
 	ImGui_ImplVulkan_InitInfo init_info = {};
 	init_info.Instance = _instance;
 	init_info.PhysicalDevice = _chosenGPU;
