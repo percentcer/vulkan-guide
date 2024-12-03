@@ -25,8 +25,8 @@ VulkanEngine* loadedEngine = nullptr;
 VulkanEngine& VulkanEngine::Get() { return *loadedEngine; }
 
 constexpr bool bUseValidationLayers = true;
-constexpr uint32_t ONE_SEC = 1000000000;
-constexpr uint32_t LONG_TIME = 9999999999;
+constexpr uint32_t ONE_SEC   = 1000000000;
+constexpr uint64_t LONG_TIME = 9999999999;
 
 constexpr uint32_t PARTICLE_COUNT = 256 * 1024;
 
@@ -203,8 +203,8 @@ void VulkanEngine::init_compute_buffers()
 	std::uniform_real_distribution<float> rndDist(-1.0f, 1.0f);
 	std::vector<ComputeParticle> particles(PARTICLE_COUNT);
 	for (ComputeParticle& p : particles) {
-		float testA = rndDist(rndEngine) * 0.5 + 0.5;
-		float testB = rndDist(rndEngine) * 0.5 + 0.5;
+		float testA = rndDist(rndEngine) * 0.5f + 0.5f;
+		float testB = rndDist(rndEngine) * 0.5f + 0.5f;
 		auto testVec = glm::vec2(testA, testB);
 		p.pos = testVec;
 		p.vel = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
@@ -581,10 +581,10 @@ void VulkanEngine::draw()
 		vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 
 		if (strcmp(effect.name, "particles") == 0) {
-			vkCmdDispatch(cmd, std::ceil(PARTICLE_COUNT / 256.0), 1, 1);
+			vkCmdDispatch(cmd, (uint32_t)std::ceil(PARTICLE_COUNT / 256.0), 1, 1);
 		}
 		else {
-			vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+			vkCmdDispatch(cmd, (uint32_t)std::ceil(_drawExtent.width / 16.0), (uint32_t)std::ceil(_drawExtent.height / 16.0), 1);
 		}
 	}
 
@@ -678,7 +678,7 @@ void VulkanEngine::run()
 
 				ImGui::Text("Selected effect: ", selected.name);
 
-				ImGui::SliderInt("Effect Index", &_currentEffect, 0, _effects.size() - 1);
+				ImGui::SliderInt("Effect Index", &_currentEffect, 0, (int)_effects.size() - 1);
 
 				ImGui::InputFloat4("data1", (float*)&selected.data.data1);
 				ImGui::InputFloat4("data2", (float*)&selected.data.data2);
