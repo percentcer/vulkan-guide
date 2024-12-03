@@ -82,6 +82,9 @@ public:
 	//run main loop
 	void run();
 
+	// time
+	uint64_t _ticksLast = 0;
+
 	VkInstance _instance;
 	VkDebugUtilsMessengerEXT _debug_messenger;
 	VkPhysicalDevice _chosenGPU;

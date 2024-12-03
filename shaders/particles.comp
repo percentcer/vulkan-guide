@@ -26,14 +26,39 @@ layout( push_constant ) uniform constants
 
 void main() 
 {
-    uint index = gl_GlobalInvocationID.x;
-
+  uint index = gl_GlobalInvocationID.x;
 	ivec2 size = imageSize(image);
-    vec2 position = particles[index].pos;
-    ivec2 imagePosition = ivec2(position * size);
+  float dt = PushConstants.data1.x;
 
-    if(imagePosition.x < size.x && imagePosition.y < size.y)
-    {
-        imageStore(image, imagePosition, vec4(0.0,1.0,1.0,1.0));
-    }
+  vec2  attr0Pos = PushConstants.data2.xy;
+  float attr0Str = PushConstants.data2.z;
+  vec2  attr1Pos = PushConstants.data3.xy;
+  float attr1Str = PushConstants.data3.z;
+
+  vec2 position = particles[index].pos;
+  vec2 velocity = particles[index].vel;
+
+  vec2 a0Fp = (attr0Pos - position);
+  vec2 a1Fp = (attr1Pos - position);
+  float falloff0 = 1./dot(a0Fp,a0Fp);
+  float falloff1 = 1./dot(a1Fp,a1Fp);
+  vec2 a0 = a0Fp * falloff0 * attr0Str;
+  vec2 a1 = a1Fp * falloff1 * attr1Str;
+
+  vec2 newVelocity = velocity + a0 + a1;
+  vec2 newPosition = position + dt * newVelocity;
+
+  // if (newPosition.x > 1. || newPosition.x < 0.) newVelocity.x *= -1.;
+  // if (newPosition.y > 1. || newPosition.y < 0.) newVelocity.y *= -1.;
+  // newPosition = mod(newPosition, vec2(1,1));
+
+  particles[index].pos = newPosition;
+  particles[index].vel = newVelocity;
+
+  ivec2 imagePosition = ivec2(newPosition * size);
+
+  if(imagePosition.x < size.x && imagePosition.y < size.y)
+  {
+      imageStore(image, imagePosition, vec4(smoothstep(0,1,length(newVelocity)),smoothstep(1,2,length(newVelocity)),1.0,1.0));
+  }
 }

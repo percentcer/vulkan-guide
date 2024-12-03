@@ -28,7 +28,7 @@ constexpr bool bUseValidationLayers = true;
 constexpr uint32_t ONE_SEC   = 1000000000;
 constexpr uint64_t LONG_TIME = 9999999999;
 
-constexpr uint32_t PARTICLE_COUNT = 256 * 1024;
+constexpr uint32_t PARTICLE_COUNT = 256*1024;
 
 void VulkanEngine::init()
 {
@@ -203,11 +203,11 @@ void VulkanEngine::init_compute_buffers()
 	std::uniform_real_distribution<float> rndDist(-1.0f, 1.0f);
 	std::vector<ComputeParticle> particles(PARTICLE_COUNT);
 	for (ComputeParticle& p : particles) {
-		float testA = rndDist(rndEngine) * 0.5f + 0.5f;
-		float testB = rndDist(rndEngine) * 0.5f + 0.5f;
-		auto testVec = glm::vec2(testA, testB);
-		p.pos = testVec;
-		p.vel = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
+		float x = rndDist(rndEngine);
+		float y = rndDist(rndEngine);
+		if (glm::length(glm::vec2(x, y)) < .2) continue;
+		p.pos = glm::vec2(x, y) * 0.5f + glm::vec2(0.5f, 0.5f);
+		p.vel = glm::vec2(y,-x) * 2.f + glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
 	}
 	VkDeviceSize bufferSize = particles.size() * sizeof(ComputeParticle);
 
@@ -401,6 +401,9 @@ void VulkanEngine::init_background_pipelines()
 	particles.layout = _gradientPipelineLayout;
 	particles.name = "particles";
 	particles.data = {};
+	particles.data.data1 = glm::vec4(0,0,0,0); // dt, _, _, _
+	particles.data.data2 = glm::vec4(0.5, 0.5, .001, 0); // attractor.pos.xy, attractor.strength, _
+	particles.data.data3 = glm::vec4(0.5, 0.5,  0.0, 0); // attractor.pos.xy, attractor.strength, _
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &particles.pipeline));
 
 	_effects.push_back(gradient);
@@ -568,8 +571,12 @@ void VulkanEngine::draw()
 
 	// draw background
 	{
+		uint64_t ticks = SDL_GetTicks64();
+		float elapsed = (ticks - _ticksLast) * .0001f;
+		_ticksLast = ticks;
+
 		VkClearColorValue clearValue;
-		float flash = std::abs(std::sin(_frameNumber / 120.f));
+		float flash = std::abs(std::sin(_frameNumber / 120.f) * .2f);
 		clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
 
 		VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
@@ -581,6 +588,7 @@ void VulkanEngine::draw()
 		vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 
 		if (strcmp(effect.name, "particles") == 0) {
+			effect.data.data1.x = elapsed;
 			vkCmdDispatch(cmd, (uint32_t)std::ceil(PARTICLE_COUNT / 256.0), 1, 1);
 		}
 		else {
