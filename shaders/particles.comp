@@ -1,0 +1,39 @@
+#version 460
+
+struct Particle {
+  vec2 pos;
+  vec2 vel;
+  vec4 color;
+  vec4 data1; // <_, _, _, _>
+  vec4 data2; // <_, _, _, _>
+};
+
+layout (local_size_x = 256) in;
+
+layout (rgba16f, set = 0, binding = 0) uniform image2D image;
+layout (std430, set = 0, binding = 1) buffer ParticleData {
+  Particle particles[];
+};
+
+// push constants block
+layout( push_constant ) uniform constants
+{
+  vec4 data1;
+  vec4 data2;
+  vec4 data3;
+  vec4 data4;
+} PushConstants;
+
+void main() 
+{
+    uint index = gl_GlobalInvocationID.x;
+
+	ivec2 size = imageSize(image);
+    vec2 position = particles[index].pos;
+    ivec2 imagePosition = ivec2(position * size);
+
+    if(imagePosition.x < size.x && imagePosition.y < size.y)
+    {
+        imageStore(image, imagePosition, vec4(0.0,1.0,1.0,1.0));
+    }
+}

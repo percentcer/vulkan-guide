@@ -124,6 +124,8 @@ public:
 	int _currentEffect{ 0 };
 
 	VkBuffer _computeStorageBuffer;
+	VkDeviceSize _computeStorageBufferSize;
+
 	VkBuffer _uniformBuffer;
 
 private:

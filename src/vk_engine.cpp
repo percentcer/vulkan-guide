@@ -203,7 +203,10 @@ void VulkanEngine::init_compute_buffers()
 	std::uniform_real_distribution<float> rndDist(-1.0f, 1.0f);
 	std::vector<ComputeParticle> particles(PARTICLE_COUNT);
 	for (ComputeParticle& p : particles) {
-		p.pos = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
+		float testA = rndDist(rndEngine) * 0.5 + 0.5;
+		float testB = rndDist(rndEngine) * 0.5 + 0.5;
+		auto testVec = glm::vec2(testA, testB);
+		p.pos = testVec;
 		p.vel = glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
 	}
 	VkDeviceSize bufferSize = particles.size() * sizeof(ComputeParticle);
@@ -245,16 +248,23 @@ void VulkanEngine::init_compute_buffers()
 			}
 		}
 	}
+	_computeStorageBufferSize = bufferSize;
 
 	VkMemoryAllocateInfo memAllocInfo {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.pNext = nullptr,
-		.allocationSize = memReqs.memoryRequirements.size,
+		.allocationSize = _computeStorageBufferSize,
 		.memoryTypeIndex = memoryTypeIdx
 	};
 
 	VkDeviceMemory deviceMemory;
 	VK_CHECK(vkAllocateMemory(_device, &memAllocInfo, nullptr, &deviceMemory));
+	{
+		void* mapped = nullptr;
+		vkMapMemory(_device, deviceMemory, 0, _computeStorageBufferSize, 0, &mapped);
+		memcpy(mapped, particles.data(), _computeStorageBufferSize);
+		vkUnmapMemory(_device, deviceMemory);
+	}
 	VK_CHECK(vkBindBufferMemory(_device, _computeStorageBuffer, deviceMemory, 0));
 
 	_deletionQueueGlobal.push_function([=]() {
@@ -268,6 +278,9 @@ void VulkanEngine::init_descriptors()
 	std::vector<DescriptorAllocator::PoolSizeRatio> ratios = {
 		{
 			VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1
+		},
+		{
+			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1
 		}
 	};
 
@@ -276,26 +289,44 @@ void VulkanEngine::init_descriptors()
 	{
 		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		_drawImageDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
 	// actually allocate one:
 	_drawImageDescriptors = _descriptorAllocatorGlobal.allocate(_device, _drawImageDescriptorLayout);
+
 	VkDescriptorImageInfo imginfo{};
 	imginfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	imginfo.imageView = _drawImage.imageView;
 
-	VkWriteDescriptorSet drawImageWrite = {};
-	drawImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	drawImageWrite.pNext = nullptr;
+	VkDescriptorBufferInfo bufferinfo{};
+	bufferinfo.buffer = _computeStorageBuffer;
+	bufferinfo.offset = 0;
+	bufferinfo.range = _computeStorageBufferSize;
+	
+	std::vector<VkWriteDescriptorSet> writes = {
+		VkWriteDescriptorSet {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = nullptr,
+			.dstSet = _drawImageDescriptors,
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = &imginfo
+		},
+		VkWriteDescriptorSet {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = nullptr,
+			.dstSet = _drawImageDescriptors,
+			.dstBinding = 1,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &bufferinfo
+		},
+	};
 
-	drawImageWrite.dstSet = _drawImageDescriptors;
-	drawImageWrite.dstBinding = 0;
-	drawImageWrite.descriptorCount = 1;
-	drawImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	drawImageWrite.pImageInfo = &imginfo;
-
-	vkUpdateDescriptorSets(_device, 1, &drawImageWrite, 0, nullptr);
+	vkUpdateDescriptorSets(_device, 2, writes.data(), 0, nullptr);
 
 	_deletionQueueGlobal.push_function([&]() {
 		_descriptorAllocatorGlobal.destroy_pool(_device);
@@ -323,9 +354,9 @@ void VulkanEngine::init_background_pipelines()
 
 	VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
 
-	VkShaderModule computeDrawShader;
-	if (!vkutil::load_shader_module("../../shaders/gradient_color.comp.spv", _device, &computeDrawShader)) {
-		fmt::print("Error when building the compute shader \n");
+	VkShaderModule gradientShader;
+	if (!vkutil::load_shader_module("../../shaders/gradient_color.comp.spv", _device, &gradientShader)) {
+		fmt::print("Error when building the gradient shader \n");
 	}
 
 	VkShaderModule skyShader;
@@ -333,10 +364,15 @@ void VulkanEngine::init_background_pipelines()
 		fmt::print("Error when building the sky shader \n");
 	}
 
+	VkShaderModule particleShader;
+	if (!vkutil::load_shader_module("../../shaders/particles.comp.spv", _device, &particleShader)) {
+		fmt::print("Error when building the particle shader \n");
+	}
+
 	VkPipelineShaderStageCreateInfo stageinfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = nullptr };
 	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	stageinfo.module = computeDrawShader;
 	stageinfo.pName = "main";
+	stageinfo.module = gradientShader;
 
 	VkComputePipelineCreateInfo computePipeCreateInfo{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .pNext = nullptr };
 	computePipeCreateInfo.layout = _gradientPipelineLayout;
@@ -350,7 +386,6 @@ void VulkanEngine::init_background_pipelines()
 	//default colors
 	gradient.data.data1 = glm::vec4(1, 0, 0, 1);
 	gradient.data.data2 = glm::vec4(1, 1, 0, 1);
-
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &gradient.pipeline));
 
 	computePipeCreateInfo.stage.module = skyShader;
@@ -359,18 +394,27 @@ void VulkanEngine::init_background_pipelines()
 	sky.name = "sky";
 	sky.data = {};
 	sky.data.data1 = glm::vec4(0.1, 0.2, 0.4, 0.97);
-
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &sky.pipeline));
+
+	computePipeCreateInfo.stage.module = particleShader;
+	ComputeEffect particles;
+	particles.layout = _gradientPipelineLayout;
+	particles.name = "particles";
+	particles.data = {};
+	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &particles.pipeline));
 
 	_effects.push_back(gradient);
 	_effects.push_back(sky);
+	_effects.push_back(particles);
 
-	vkDestroyShaderModule(_device, computeDrawShader, nullptr);
+	vkDestroyShaderModule(_device, gradientShader, nullptr);
 	vkDestroyShaderModule(_device, skyShader, nullptr);
+	vkDestroyShaderModule(_device, particleShader, nullptr);
 	_deletionQueueGlobal.push_function([=]() {
 		vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
 		vkDestroyPipeline(_device, gradient.pipeline, nullptr);
 		vkDestroyPipeline(_device, sky.pipeline, nullptr);
+		vkDestroyPipeline(_device, particles.pipeline, nullptr);
 		});
 }
 
@@ -524,18 +568,24 @@ void VulkanEngine::draw()
 
 	// draw background
 	{
-		//VkClearColorValue clearValue;
-		//float flash = std::abs(std::sin(_frameNumber / 120.f));
-		//clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
+		VkClearColorValue clearValue;
+		float flash = std::abs(std::sin(_frameNumber / 120.f));
+		clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
 
-		//VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
-		//vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+		VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+		vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
 		ComputeEffect& effect = _effects[_currentEffect];
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
 		vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 
-		vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+		if (strcmp(effect.name, "particles") == 0) {
+			vkCmdDispatch(cmd, std::ceil(PARTICLE_COUNT / 256.0), 1, 1);
+		}
+		else {
+			vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+		}
 	}
 
 	// prepare to blit (from draw to current swapchain)
