@@ -24,7 +24,11 @@ layout( push_constant ) uniform constants
   vec4 data4;
 } PushConstants;
 
-#define INVSQR(arg) (1./dot(arg, arg))
+float invsqr(vec2 v) 
+{
+  float l = length(v);
+  return 1. / (l * l);
+}
 
 // plotLine(x0, y0, x1, y1)
 //     dx = x1 - x0
@@ -120,8 +124,8 @@ void main()
 
   float a0Str = PushConstants.data2.z;
   float a1Str = PushConstants.data3.z;
-  vec2 a0 = a0Fp * INVSQR(a0Fp) * a0Str;
-  vec2 a1 = a1Fp * INVSQR(a0Fp) * a1Str;
+  vec2 a0 = a0Fp * invsqr(a0Fp) * a0Str;
+  vec2 a1 = a1Fp * invsqr(a1Fp) * a1Str;
 
   vec2 newVelocity = velocity + dt * (a0 + a1);
   vec2 newPosition = position + dt * newVelocity;
