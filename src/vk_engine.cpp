@@ -205,9 +205,10 @@ void VulkanEngine::init_compute_buffers()
 	for (ComputeParticle& p : particles) {
 		float x = rndDist(rndEngine);
 		float y = rndDist(rndEngine);
-		if (glm::length(glm::vec2(x, y)) < .2) continue;
+		float len = glm::length(glm::vec2(x, y));
+		//if (len < .5) continue;
 		p.pos = glm::vec2(x, y) * 0.5f + glm::vec2(0.5f, 0.5f);
-		p.vel = glm::vec2(y,-x) * 2.f + glm::vec2(rndDist(rndEngine), rndDist(rndEngine));
+		p.vel = (glm::vec2(y, -x) + glm::vec2(rndDist(rndEngine), rndDist(rndEngine))) * .01f;
 	}
 	VkDeviceSize bufferSize = particles.size() * sizeof(ComputeParticle);
 
@@ -402,8 +403,8 @@ void VulkanEngine::init_background_pipelines()
 	particles.name = "particles";
 	particles.data = {};
 	particles.data.data1 = glm::vec4(0,0,0,0); // dt, _, _, _
-	particles.data.data2 = glm::vec4(0.5, 0.5, .001, 0); // attractor.pos.xy, attractor.strength, _
-	particles.data.data3 = glm::vec4(0.5, 0.5,  0.0, 0); // attractor.pos.xy, attractor.strength, _
+	particles.data.data2 = glm::vec4(0.8, 0.2, .001, 0); // attractor.pos.xy, attractor.strength, _
+	particles.data.data3 = glm::vec4(0.2, 0.8, .001, 0); // attractor.pos.xy, attractor.strength, _
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipeCreateInfo, nullptr, &particles.pipeline));
 
 	_effects.push_back(gradient);
@@ -572,7 +573,7 @@ void VulkanEngine::draw()
 	// draw background
 	{
 		uint64_t ticks = SDL_GetTicks64();
-		float elapsed = (ticks - _ticksLast) * .0001f;
+		float elapsed = (ticks - _ticksLast) * .001f;
 		_ticksLast = ticks;
 
 		VkClearColorValue clearValue;

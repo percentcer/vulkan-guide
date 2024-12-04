@@ -26,6 +26,84 @@ layout( push_constant ) uniform constants
 
 #define INVSQR(arg) (1./dot(arg, arg))
 
+// plotLine(x0, y0, x1, y1)
+//     dx = x1 - x0
+//     dy = y1 - y0
+//     D = 2*dy - dx
+//     y = y0
+
+//     for x from x0 to x1
+//         plot(x, y)
+//         if D > 0
+//             y = y + 1
+//             D = D - 2*dx
+//         end if
+//         D = D + 2*dy
+void bresenham_0(ivec2 p0, ivec2 p1, vec4 color)
+{
+    int dx = p1.x - p0.x;
+    int dy = p1.y - p0.y;
+    int D = 2 * dy - dx;
+    int y = p0.y;
+
+    for(int x = p0.x; x <= p1.x; x++) 
+    {
+      imageStore(image, ivec2(x,y), color);
+      if (D > 0) 
+      {
+        y = y + 1;
+        D = D - 2 * dx;
+      }
+      D = D + 2 * dy;
+    }
+}
+
+// plotLine(x0, y0, x1, y1)
+//     dx = abs(x1 - x0)
+//     sx = x0 < x1 ? 1 : -1
+//     dy = -abs(y1 - y0)
+//     sy = y0 < y1 ? 1 : -1
+//     error = dx + dy
+    
+//     while true
+//         plot(x0, y0)
+//         if x0 == x1 && y0 == y1 break
+//         e2 = 2 * error
+//         if e2 >= dy
+//             error = error + dy
+//             x0 = x0 + sx
+//         end if
+//         if e2 <= dx
+//             error = error + dx
+//             y0 = y0 + sy
+//         end if
+//     end while
+void bresenham_interr(ivec2 p0, ivec2 p1, vec4 color)
+{
+  int dx = abs(p1.x - p0.x);
+  int sx = p0.x < p1.x ? 1 : -1;
+  int dy = -abs(p1.y - p0.y);
+  int sy = p0.y < p1.y ? 1 : -1;
+  int err = dx + dy;
+  for (int c = 0; c < 100; c++) {
+    imageStore(image, p0, color);
+
+    if (p0 == p1) {break;}
+
+    int e2 = 2 * err;
+
+    if (e2 >= dy) {
+      err = err + dy;
+      p0.x = p0.x + sx;
+    }
+
+    if (e2 <= dx) {
+      err = err + dx;
+      p0.y = p0.y + sy;
+    }
+  }
+}
+
 void main() 
 {
 	ivec2 size = imageSize(image);
@@ -35,8 +113,8 @@ void main()
   vec2 position = particles[index].pos;
   vec2 velocity = particles[index].vel;
 
-  vec2  a0Pos = PushConstants.data2.xy;
-  vec2  a1Pos = PushConstants.data3.xy;
+  vec2 a0Pos = PushConstants.data2.xy;
+  vec2 a1Pos = PushConstants.data3.xy;
   vec2 a0Fp = (a0Pos - position);
   vec2 a1Fp = (a1Pos - position);
 
@@ -45,7 +123,7 @@ void main()
   vec2 a0 = a0Fp * INVSQR(a0Fp) * a0Str;
   vec2 a1 = a1Fp * INVSQR(a0Fp) * a1Str;
 
-  vec2 newVelocity = velocity + a0 + a1;
+  vec2 newVelocity = velocity + dt * (a0 + a1);
   vec2 newPosition = position + dt * newVelocity;
 
   // if (newPosition.x > 1. || newPosition.x < 0.) newVelocity.x *= -1.;
@@ -55,10 +133,15 @@ void main()
   particles[index].pos = newPosition;
   particles[index].vel = newVelocity;
 
+  vec4 color = vec4(smoothstep(0,0.2,length(newVelocity)), smoothstep(0.2,0.6,length(newVelocity)), 1.0, 1.0);
+
+  ivec2 oldImagePosition = ivec2(position * size);
   ivec2 imagePosition = ivec2(newPosition * size);
 
-  if(imagePosition.x < size.x && imagePosition.y < size.y)
-  {
-      imageStore(image, imagePosition, vec4(smoothstep(0,1,length(newVelocity)),smoothstep(1,2,length(newVelocity)),1.0,1.0));
-  }
+  bresenham_interr(oldImagePosition, imagePosition, color);
+
+  // if(imagePosition.x < size.x && imagePosition.y < size.y)
+  // {
+  //     imageStore(image, imagePosition, vec4(smoothstep(0,1,length(newVelocity)),smoothstep(1,2,length(newVelocity)),1.0,1.0));
+  // }
 }
